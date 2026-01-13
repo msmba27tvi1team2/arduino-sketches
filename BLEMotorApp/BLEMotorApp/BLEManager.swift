@@ -5,7 +5,7 @@ import Combine
 fileprivate let nusServiceUUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
 fileprivate let nusRXUUID      = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E") // write (phone -> feather)
 fileprivate let nusTXUUID      = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E") // notify (feather -> phone)
-fileprivate let targetDeviceName = "Feather ESP32-S3"
+fileprivate let targetDeviceName = "Feather S3 Stepper"
 
 final class BLEManager: NSObject, ObservableObject {
     @Published var statusText: String = "Idle"
@@ -98,8 +98,12 @@ extension BLEManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                         rssi RSSI: NSNumber) {
         let name = peripheral.name ?? "Unknown"
         let line = "\(name) (RSSI: \(RSSI))"
-        if !discoveredDevices.contains(line) {
-            discoveredDevices.append(line)
+        // Skip adding devices whose name contains "Unknown" to the UI list,
+        // so the main page doesn't get cluttered with anonymous devices.
+        if !name.lowercased().contains("unknown") {
+            if !discoveredDevices.contains(line) {
+                discoveredDevices.append(line)
+            }
         }
         print("[BLE] Discovered peripheral: \(line), advData=\(advertisementData)")
 

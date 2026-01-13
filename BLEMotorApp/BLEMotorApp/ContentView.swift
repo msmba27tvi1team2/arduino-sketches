@@ -30,7 +30,7 @@ struct ContentView: View {
                 }.disabled(!ble.connected)
             }
             HStack {
-                Button(action: { ble.sendCommand("M:CW") }) {
+                Button(action: { ble.sendCommand("CW") }) {
                     Text("CW")
                         .frame(minWidth: 60)
                         .padding()
@@ -38,7 +38,7 @@ struct ContentView: View {
                         .foregroundColor(.white)
                         .cornerRadius(8)
                 }
-                Button(action: { ble.sendCommand("M:STOP") }) {
+                Button(action: { ble.sendCommand("STOP") }) {
                     Text("STOP")
                         .frame(minWidth: 60)
                         .padding()
@@ -46,7 +46,7 @@ struct ContentView: View {
                         .foregroundColor(.white)
                         .cornerRadius(8)
                 }
-                Button(action: { ble.sendCommand("M:CCW") }) {
+                Button(action: { ble.sendCommand("CCW") }) {
                     Text("CCW")
                         .frame(minWidth: 60)
                         .padding()
@@ -62,7 +62,7 @@ struct ContentView: View {
                 } minimumValueLabel: { Text("0") } maximumValueLabel: { Text("255") }
                 Button("Set Speed") {
                     let s = Int(speed)
-                    ble.sendCommand("M:S:\(s)")
+                    ble.sendCommand("S:\(s)")
                 }.padding(.top, 8)
             }.padding()
             VStack(alignment: .leading) {
