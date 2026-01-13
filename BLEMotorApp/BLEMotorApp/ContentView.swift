@@ -2,78 +2,89 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var ble = BLEManager()
-    @State private var speed: Double = 255.0
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 20) {
+            // Status Section
             VStack(alignment: .leading, spacing: 8) {
                 Text(ble.statusText)
+                    .font(.headline)
                     .padding(.bottom, 4)
+                
                 if !ble.discoveredDevices.isEmpty {
-                    Text("Devices seen during scan:")
-                        .font(.headline)
+                    Text("Devices seen:")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                     ForEach(ble.discoveredDevices, id: \.self) { device in
                         Text(device)
                             .font(.caption)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .lineLimit(1)
                     }
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
-            HStack {
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
+            
+            // Connection Controls
+            HStack(spacing: 20) {
                 Button("Scan & Connect") {
                     ble.startScan()
                 }
+                .buttonStyle(.borderedProminent)
                 .disabled(ble.connected)
+                
                 Button("Disconnect") {
                     ble.disconnect()
-                }.disabled(!ble.connected)
+                }
+                .buttonStyle(.bordered)
+                .disabled(!ble.connected)
             }
-            HStack {
-                Button(action: { ble.sendCommand("CW") }) {
-                    Text("CW")
-                        .frame(minWidth: 60)
-                        .padding()
-                        .background(Color.green)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                Button(action: { ble.sendCommand("STOP") }) {
-                    Text("STOP")
-                        .frame(minWidth: 60)
-                        .padding()
-                        .background(Color.red)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
-                Button(action: { ble.sendCommand("CCW") }) {
-                    Text("CCW")
-                        .frame(minWidth: 60)
-                        .padding()
-                        .background(Color.orange)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                }
+            
+            Spacer()
+            
+            // Motor Controls
+            // Motor Controls
+            HStack(spacing: 60) {
+                // CW Button (Hold to repeat)
+                Text("CW")
+                    .font(.title2.bold())
+                    .frame(width: 80, height: 80)
+                    .background(Color.green)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .shadow(radius: 4)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                ble.startRepeatingCommand("CW")
+                            }
+                            .onEnded { _ in
+                                ble.stopRepeatingCommand()
+                            }
+                    )
+                
+                // CCW Button (Hold to repeat)
+                Text("CCW")
+                    .font(.title2.bold())
+                    .frame(width: 80, height: 80)
+                    .background(Color.orange)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .shadow(radius: 4)
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { _ in
+                                ble.startRepeatingCommand("CCW")
+                            }
+                            .onEnded { _ in
+                                ble.stopRepeatingCommand()
+                            }
+                    )
             }
-            VStack {
-                Text("Speed: \(Int(speed))")
-                Slider(value: $speed, in: 0...255, step: 1) {
-                    Text("Speed")
-                } minimumValueLabel: { Text("0") } maximumValueLabel: { Text("255") }
-                Button("Set Speed") {
-                    let s = Int(speed)
-                    ble.sendCommand("S:\(s)")
-                }.padding(.top, 8)
-            }.padding()
-            VStack(alignment: .leading) {
-                Text("Last message from Feather:")
-                Text(ble.lastReceived)
-                    .font(.body)
-                    .padding(6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color(.secondarySystemBackground))
-                    .cornerRadius(8)
-            }.padding()
+            .padding(.bottom, 40)
+            
             Spacer()
         }
         .padding()

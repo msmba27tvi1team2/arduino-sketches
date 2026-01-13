@@ -79,6 +79,7 @@ void loop() {
     Serial.print(" | ML: magnet too weak");
   }
 
+
   Serial.println();
   delay(50);
 }

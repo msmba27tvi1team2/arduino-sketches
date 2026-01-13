@@ -17,6 +17,7 @@ final class BLEManager: NSObject, ObservableObject {
     private var peripheral: CBPeripheral?
     private var rxCharacteristic: CBCharacteristic? // write here
     private var txCharacteristic: CBCharacteristic? // notify here
+    private var repeatTimer: Timer? // For repeating commands
 
     override init() {
         super.init()
@@ -62,6 +63,23 @@ final class BLEManager: NSObject, ObservableObject {
         guard let data = text.data(using: .utf8) else { return }
         p.writeValue(data, for: rx, type: .withResponse)
         statusText = "Sent: \(text)"
+    }
+
+    func startRepeatingCommand(_ command: String) {
+        guard repeatTimer == nil else { return }
+        
+        // Send initial command immediately
+        sendCommand(command) 
+        
+        // Repeat every 100ms
+        repeatTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
+            self?.sendCommand(command)
+        }
+    }
+
+    func stopRepeatingCommand() {
+        repeatTimer?.invalidate()
+        repeatTimer = nil
     }
 }
 
