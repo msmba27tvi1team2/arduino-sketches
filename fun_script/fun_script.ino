@@ -65,10 +65,13 @@ void updateSensor() {
           firstRead = false;
       }
 
-      // Detect Wrap-Around (threshold ~1000 ticks)
-      if ((currentRawAngle < 1000) && (lastRawAngle > 3000)) {
+      // Detect Wrap-Around 
+      // Since sensor only goes 0-1800 per mech rev, detect wraps around that range
+      // Threshold: if angle jumps from >1500 to <300, we wrapped forward
+      // if angle jumps from <300 to >1500, we wrapped backward
+      if ((currentRawAngle < 300) && (lastRawAngle > 1500)) {
           sensorRotations++;
-      } else if ((currentRawAngle > 3000) && (lastRawAngle < 1000)) {
+      } else if ((currentRawAngle > 1500) && (lastRawAngle < 300)) {
           sensorRotations--;
       }
       lastRawAngle = currentRawAngle;
@@ -76,7 +79,8 @@ void updateSensor() {
       if (deviceConnected && (millis() - lastSensorReadTime > sensorReadInterval)) {
           lastSensorReadTime = millis();
           
-          double totalSensorTicks = (sensorRotations * 4096.0) + currentRawAngle;
+          // Use 1800 as the tick-per-revolution since that's the actual sensor range
+          double totalSensorTicks = (sensorRotations * 1800.0) + currentRawAngle;
           
           // Smooth the total ticks to reduce jitter
           static double smoothedTicks = 0;
@@ -90,17 +94,18 @@ void updateSensor() {
             smoothedTicks = (0.2 * totalSensorTicks) + (0.8 * smoothedTicks);
           }
 
-          // Calibration: 1 Mech Rev = 4 Sensor Revs = 16384 ticks
-          double totalMechRevs = smoothedTicks / 16384.0; 
+          // Calibration: User measurement shows ~1800 ticks per mechanical revolution
+          double totalMechRevs = smoothedTicks / 1800.0; 
           
           double currentMechAngle = totalMechRevs * 360.0;
           
-          int mechRotations = (int)totalMechRevs;
-          double angle0to360 = (currentMechAngle - (mechRotations * 360.0));
+          // Extract whole rotations and fractional angle
+          double mechRotations = totalMechRevs; // Keep as double for fractional rotations
+          double angle0to360 = fmod(currentMechAngle, 360.0);
           if (angle0to360 < 0) angle0to360 += 360.0;
           
-          // Format: "A:123.4 R:5 T:16000" (Added Ticks for debug)
-          String dataStr = "A:" + String(angle0to360, 1) + " R:" + String(mechRotations) + " T:" + String((long)smoothedTicks);
+          // Format: "A:123.4 R:2.4 T:1800" 
+          String dataStr = "A:" + String(angle0to360, 1) + " R:" + String(mechRotations, 1) + " T:" + String((long)smoothedTicks);
           
           pTxCharacteristic->setValue(dataStr.c_str());
           pTxCharacteristic->notify();

@@ -50,7 +50,7 @@ struct ContentView: View {
                              .font(.caption)
                              .foregroundColor(.secondary)
                              .padding(.top, 4)
-                         Text("\(rotations)")
+                         Text(String(format: "%.1f", rotations))
                              .font(.title2.monospaced())
                              .bold()
                              
@@ -129,11 +129,11 @@ struct ContentView: View {
         }
         .padding()
     }
-    func parseSensorData(_ data: String) -> (Double, Int, Int) {
-        // Format e.g. "A:123.4 R:5 T:16000"
+    func parseSensorData(_ data: String) -> (Double, Double, Int) {
+        // Format e.g. "A:123.4 R:2.4 T:1800"
         let components = data.components(separatedBy: " ")
         var angle = 0.0
-        var rotations = 0
+        var rotations = 0.0
         var ticks = 0
         
         for comp in components {
@@ -142,7 +142,7 @@ struct ContentView: View {
                 angle = Double(val) ?? 0.0
             } else if comp.starts(with: "R:") {
                 let val = comp.dropFirst(2)
-                rotations = Int(val) ?? 0
+                rotations = Double(val) ?? 0.0
             } else if comp.starts(with: "T:") {
                 let val = comp.dropFirst(2)
                 ticks = Int(val) ?? 0
