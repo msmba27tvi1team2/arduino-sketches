@@ -6,6 +6,7 @@
 #include <BLEUtils.h>
 #include <BLE2902.h>
 #include <Stepper.h>
+#include <Adafruit_AS5600.h>
 
 // --- Stepper Setup ---
 const int stepsPerRevolution = 200;
@@ -14,6 +15,11 @@ Stepper myStepper(stepsPerRevolution, 6, 9, 10, 11);
 
 // --- Screen Setup ---
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
+
+// --- Sensor Setup ---
+Adafruit_AS5600 as5600;
+unsigned long lastSensorReadTime = 0;
+const unsigned long sensorReadInterval = 100; // Send update every 100ms
 
 // --- Bluetooth Setup ---
 BLEServer *pServer = NULL;
@@ -44,13 +50,78 @@ class MyCallbacks: public BLECharacteristicCallbacks {
     }
 };
 
+void updateSensor() {
+  // 3. Sensor Tracking & Bluetooth
+  if (as5600.isMagnetDetected()) {
+      static uint16_t lastRawAngle = 0;
+      static long sensorRotations = 0;
+      static bool firstRead = true;
+      
+      // Use getRawAngle for 0-4095 integrity
+      uint16_t currentRawAngle = as5600.getRawAngle(); 
+
+      if (firstRead) {
+          lastRawAngle = currentRawAngle;
+          firstRead = false;
+      }
+
+      // Detect Wrap-Around (threshold ~1000 ticks)
+      if ((currentRawAngle < 1000) && (lastRawAngle > 3000)) {
+          sensorRotations++;
+      } else if ((currentRawAngle > 3000) && (lastRawAngle < 1000)) {
+          sensorRotations--;
+      }
+      lastRawAngle = currentRawAngle;
+
+      if (deviceConnected && (millis() - lastSensorReadTime > sensorReadInterval)) {
+          lastSensorReadTime = millis();
+          
+          double totalSensorTicks = (sensorRotations * 4096.0) + currentRawAngle;
+          
+          // Smooth the total ticks to reduce jitter
+          static double smoothedTicks = 0;
+          static bool firstRunSmoothed = true;
+          
+          if (firstRunSmoothed) {
+            smoothedTicks = totalSensorTicks;
+            firstRunSmoothed = false;
+          } else {
+            // EMA Smoothing
+            smoothedTicks = (0.2 * totalSensorTicks) + (0.8 * smoothedTicks);
+          }
+
+          // Calibration: 1 Mech Rev = 4 Sensor Revs = 16384 ticks
+          double totalMechRevs = smoothedTicks / 16384.0; 
+          
+          double currentMechAngle = totalMechRevs * 360.0;
+          
+          int mechRotations = (int)totalMechRevs;
+          double angle0to360 = (currentMechAngle - (mechRotations * 360.0));
+          if (angle0to360 < 0) angle0to360 += 360.0;
+          
+          // Format: "A:123.4 R:5 T:16000" (Added Ticks for debug)
+          String dataStr = "A:" + String(angle0to360, 1) + " R:" + String(mechRotations) + " T:" + String((long)smoothedTicks);
+          
+          pTxCharacteristic->setValue(dataStr.c_str());
+          pTxCharacteristic->notify();
+      }
+  }
+}
+
 void clockwise(){
-  // Update screen to show what's happening
   tft.setCursor(0, 40);
   tft.print("Moving CW...");
-  
   myStepper.setSpeed(50);
-  myStepper.step(stepsPerRevolution);
+  
+  // Non-blocking step loop
+  int stepsRemaining = stepsPerRevolution;
+  int chunkSize = 5; 
+  while(stepsRemaining > 0) {
+      int s = (stepsRemaining > chunkSize) ? chunkSize : stepsRemaining;
+      myStepper.step(s); 
+      stepsRemaining -= s;
+      updateSensor(); // Check sensor while moving
+  }
   
   tft.setCursor(0, 40);
   tft.setTextColor(ST77XX_GREEN);
@@ -61,9 +132,17 @@ void clockwise(){
 void counterclockwise(){
   tft.setCursor(0, 40);
   tft.print("Moving CCW...");
-  
   myStepper.setSpeed(50);
-  myStepper.step(-stepsPerRevolution);
+  
+  // Non-blocking step loop
+  int stepsRemaining = stepsPerRevolution;
+  int chunkSize = 5; 
+  while(stepsRemaining > 0) {
+      int s = (stepsRemaining > chunkSize) ? chunkSize : stepsRemaining;
+      myStepper.step(-s); 
+      stepsRemaining -= s;
+      updateSensor(); // Check sensor while moving
+  }
   
   tft.setCursor(0, 40);
   tft.setTextColor(ST77XX_GREEN);
@@ -114,6 +193,24 @@ void setup() {
 
   pService->start();
   pServer->getAdvertising()->start();
+
+  // 3. Start Sensor
+  if (!as5600.begin()) {
+    Serial.println("Could not find AS5600 sensor, check wiring!");
+    tft.setCursor(0, 100);
+    tft.setTextColor(ST77XX_RED);
+    tft.print("No Sensor!");
+    tft.setTextColor(ST77XX_WHITE);
+  } else {
+    as5600.setPowerMode(AS5600_POWER_MODE_NOM);
+    as5600.setHysteresis(AS5600_HYSTERESIS_3LSB); // Enable Hysteresis to reduce noise
+    as5600.setOutputStage(AS5600_OUTPUT_STAGE_ANALOG_FULL);
+    as5600.setSlowFilter(AS5600_SLOW_FILTER_16X);
+    as5600.setFastFilterThresh(AS5600_FAST_FILTER_THRESH_SLOW_ONLY);
+    as5600.setZPosition(0);
+    as5600.setMPosition(4095);
+    as5600.setMaxAngle(4095);
+  }
 }
 
 void loop() {
@@ -154,4 +251,7 @@ void loop() {
       tft.setCursor(0,0);
       tft.print("Connected!");
   }
+
+  // 3. Sensor Tracking & Bluetooth
+  updateSensor();
 }
