@@ -2,6 +2,13 @@ import SwiftUI
 
 struct ContentView: View {
     @StateObject private var ble = BLEManager()
+    
+    // Calibration state
+    @State private var highRotation: Double? = nil
+    @State private var lowRotation: Double? = nil
+    @State private var isAutoPositioning = false
+    @State private var targetRotation: Double? = nil
+    @State private var positioningTolerance: Double = 0.05
 
     var body: some View {
         VStack(spacing: 20) {
@@ -65,6 +72,9 @@ struct ContentView: View {
                  .padding()
                  .background(Color.blue.opacity(0.1))
                  .cornerRadius(12)
+                 .onChange(of: rotations) { newRotation in
+                     checkAutoPositioning(currentRotation: newRotation)
+                 }
             }
             
             // Connection Controls
@@ -82,9 +92,82 @@ struct ContentView: View {
                 .disabled(!ble.connected)
             }
             
+            // Calibration Section
+            VStack(spacing: 12) {
+                Text("Calibration")
+                    .font(.headline)
+                
+                HStack(spacing: 12) {
+                    VStack {
+                        Button("Set Low") {
+                            if let (_, rotations, _) = getCurrentSensorData() {
+                                lowRotation = rotations
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.blue)
+                        
+                        if let low = lowRotation {
+                            Text("Low: \(String(format: "%.1f", low))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    
+                    VStack {
+                        Button("Set High") {
+                            if let (_, rotations, _) = getCurrentSensorData() {
+                                highRotation = rotations
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.purple)
+                        
+                        if let high = highRotation {
+                            Text("High: \(String(format: "%.1f", high))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                HStack(spacing: 12) {
+                    Button("Go to Low") {
+                        goToPosition(lowRotation)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .disabled(lowRotation == nil || isAutoPositioning || !ble.connected)
+                    
+                    Button("Go to High") {
+                        goToPosition(highRotation)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .disabled(highRotation == nil || isAutoPositioning || !ble.connected)
+                }
+                
+                if isAutoPositioning {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Moving to target...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Button("Stop") {
+                            stopAutoPositioning()
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                    }
+                }
+            }
+            .padding()
+            .background(Color.purple.opacity(0.1))
+            .cornerRadius(12)
+            
             Spacer()
             
-            // Motor Controls
             // Motor Controls
             HStack(spacing: 60) {
                 // CW Button (Hold to repeat)
@@ -98,7 +181,9 @@ struct ContentView: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { _ in
-                                ble.startRepeatingCommand("CW")
+                                if !isAutoPositioning {
+                                    ble.startRepeatingCommand("CW")
+                                }
                             }
                             .onEnded { _ in
                                 ble.stopRepeatingCommand()
@@ -116,7 +201,9 @@ struct ContentView: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { _ in
-                                ble.startRepeatingCommand("CCW")
+                                if !isAutoPositioning {
+                                    ble.startRepeatingCommand("CCW")
+                                }
                             }
                             .onEnded { _ in
                                 ble.stopRepeatingCommand()
@@ -129,6 +216,41 @@ struct ContentView: View {
         }
         .padding()
     }
+    
+    func getCurrentSensorData() -> (Double, Double, Int)? {
+        if !ble.lastReceived.isEmpty {
+            return parseSensorData(ble.lastReceived)
+        }
+        return nil
+    }
+    
+    func goToPosition(_ target: Double?) {
+        guard let target = target else { return }
+        targetRotation = target
+        isAutoPositioning = true
+        
+        // Start moving in the appropriate direction
+        if let (_, currentRotation, _) = getCurrentSensorData() {
+            let direction = target > currentRotation ? "CW" : "CCW"
+            ble.startRepeatingCommand(direction)
+        }
+    }
+    
+    func checkAutoPositioning(currentRotation: Double) {
+        guard isAutoPositioning, let target = targetRotation else { return }
+        
+        // Check if we've reached the target (within tolerance)
+        if abs(currentRotation - target) <= positioningTolerance {
+            stopAutoPositioning()
+        }
+    }
+    
+    func stopAutoPositioning() {
+        isAutoPositioning = false
+        targetRotation = nil
+        ble.stopRepeatingCommand()
+    }
+    
     func parseSensorData(_ data: String) -> (Double, Double, Int) {
         // Format e.g. "A:123.4 R:2.4 T:1800"
         let components = data.components(separatedBy: " ")
