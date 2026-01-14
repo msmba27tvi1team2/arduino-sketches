@@ -18,6 +18,8 @@ final class BLEManager: NSObject, ObservableObject {
     private var rxCharacteristic: CBCharacteristic? // write here
     private var txCharacteristic: CBCharacteristic? // notify here
 
+    static let shared = BLEManager()
+
     override init() {
         super.init()
         central = CBCentralManager(delegate: self, queue: nil)
@@ -71,6 +73,44 @@ final class BLEManager: NSObject, ObservableObject {
 
     func stopMotor() {
         sendCommand("STOP")
+    }
+    
+    // MARK: - Async / Intent Support
+    func ensureConnected() async throws {
+        if connected && peripheral != nil { return }
+        
+        // Start scanning on main thread as CBCentralManager is not thread-safe and usually bound to main
+        await MainActor.run {
+            self.startScan()
+        }
+        
+        // Wait for connection with timeout (10 seconds)
+        for _ in 0..<20 {
+            if connected && peripheral != nil { return }
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+        
+        if !connected {
+            throw NSError(domain: "BLEManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "Failed to connect to device. Ensure it is powered on and in range."])
+        }
+    }
+    
+    func runMotorForDuration(direction: String, seconds: Double) async throws {
+        // Ensure we are connected
+        try await ensureConnected()
+        
+        // Send start command
+        await MainActor.run {
+            self.startMotor(direction)
+        }
+        
+        // Wait for the specified duration
+        try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+        
+        // Send stop command
+        await MainActor.run {
+            self.stopMotor()
+        }
     }
 }
 

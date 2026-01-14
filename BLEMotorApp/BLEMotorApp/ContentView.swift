@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct ContentView: View {
-    @StateObject private var ble = BLEManager()
+    @ObservedObject private var ble = BLEManager.shared
     
     // Calibration state
     @State private var highRotation: Double? = nil
@@ -11,6 +11,7 @@ struct ContentView: View {
     @State private var positioningTolerance: Double = 0.05
     @State private var isButtonPressed = false
     @AppStorage("isSwapped") private var isSwapped = false
+    @AppStorage("defaultDuration") private var defaultDuration: Double = 5.0
 
     var body: some View {
         VStack(spacing: 20) {
@@ -74,7 +75,7 @@ struct ContentView: View {
                  .padding()
                  .background(Color.blue.opacity(0.1))
                  .cornerRadius(12)
-                 .onChange(of: rotations) { newRotation in
+                 .onChange(of: rotations) { _, newRotation in
                      checkAutoPositioning(currentRotation: newRotation)
                  }
             }
@@ -166,6 +167,25 @@ struct ContentView: View {
             }
             .padding()
             .background(Color.purple.opacity(0.1))
+            .cornerRadius(12)
+            
+            // Voice Control Settings
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Voice Control Settings")
+                    .font(.headline)
+                
+                HStack {
+                    Text("Default Duration:")
+                        .font(.subheadline)
+                    Spacer()
+                    Text("\(String(format: "%.1f", defaultDuration)) s")
+                        .font(.system(.body, design: .monospaced))
+                }
+                
+                Slider(value: $defaultDuration, in: 1...30, step: 0.5)
+            }
+            .padding()
+            .background(Color(.systemGray6))
             .cornerRadius(12)
             
             Spacer()
@@ -322,7 +342,7 @@ struct CompassView: View {
         .onAppear {
             visualAngle = angle
         }
-        .onChange(of: angle) { newValue in
+        .onChange(of: angle) { _, newValue in
             let currentMod = visualAngle.truncatingRemainder(dividingBy: 360)
             let normalizedCurrent = currentMod < 0 ? currentMod + 360 : currentMod
             
