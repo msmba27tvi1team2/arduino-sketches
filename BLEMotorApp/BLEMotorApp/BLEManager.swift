@@ -17,7 +17,6 @@ final class BLEManager: NSObject, ObservableObject {
     private var peripheral: CBPeripheral?
     private var rxCharacteristic: CBCharacteristic? // write here
     private var txCharacteristic: CBCharacteristic? // notify here
-    private var repeatTimer: Timer? // For repeating commands
 
     override init() {
         super.init()
@@ -60,26 +59,18 @@ final class BLEManager: NSObject, ObservableObject {
             statusText = "Not connected"
             return
         }
+        
         guard let data = text.data(using: .utf8) else { return }
         p.writeValue(data, for: rx, type: .withResponse)
         statusText = "Sent: \(text)"
     }
 
-    func startRepeatingCommand(_ command: String) {
-        guard repeatTimer == nil else { return }
-        
-        // Send initial command immediately
-        sendCommand(command) 
-        
-        // Repeat every 100ms
-        repeatTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.sendCommand(command)
-        }
+    func startMotor(_ direction: String) {
+        sendCommand("START_\(direction)")
     }
 
-    func stopRepeatingCommand() {
-        repeatTimer?.invalidate()
-        repeatTimer = nil
+    func stopMotor() {
+        sendCommand("STOP")
     }
 }
 
@@ -200,7 +191,10 @@ extension BLEManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         }
         if let data = characteristic.value, let s = String(data: data, encoding: .utf8) {
             DispatchQueue.main.async {
-                self.lastReceived = s
+                // Only process sensor data (format: "A:123.4 R:2.4 T:1800")
+                if s.starts(with: "A:") {
+                    self.lastReceived = s
+                }
             }
         }
     }

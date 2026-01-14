@@ -19,7 +19,7 @@ Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
 // --- Sensor Setup ---
 Adafruit_AS5600 as5600;
 unsigned long lastSensorReadTime = 0;
-const unsigned long sensorReadInterval = 100; // Send update every 100ms
+const unsigned long sensorReadInterval = 50; // Send update every 50ms (faster for more responsive control)
 
 // --- Bluetooth Setup ---
 BLEServer *pServer = NULL;
@@ -31,6 +31,11 @@ bool oldDeviceConnected = false;
 // We use these to pass data from the Bluetooth task to the Main Loop
 String incomingCommand = "";
 bool newCommandReceived = false;
+
+// --- Motor State ---
+enum MotorState { STOPPED, ROTATING_CW, ROTATING_CCW };
+MotorState motorState = STOPPED;
+MotorState lastDisplayedState = STOPPED;
 
 #define SERVICE_UUID           "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
@@ -113,46 +118,43 @@ void updateSensor() {
   }
 }
 
-void clockwise(){
-  tft.setCursor(0, 40);
-  tft.print("Moving CW...");
-  myStepper.setSpeed(50);
-  
-  // Non-blocking step loop
-  int stepsRemaining = stepsPerRevolution;
-  int chunkSize = 5; 
-  while(stepsRemaining > 0) {
-      int s = (stepsRemaining > chunkSize) ? chunkSize : stepsRemaining;
-      myStepper.step(s); 
-      stepsRemaining -= s;
-      updateSensor(); // Check sensor while moving
+void updateDisplay() {
+  if (lastDisplayedState == motorState) {
+    return; // Don't update if state hasn't changed
   }
   
-  tft.setCursor(0, 40);
-  tft.setTextColor(ST77XX_GREEN);
-  tft.print("Done!       ");
+  lastDisplayedState = motorState;
+  tft.fillScreen(ST77XX_BLACK);
+  tft.setCursor(0, 0);
+  tft.setTextSize(2);
+  
+  switch(motorState) {
+    case ROTATING_CW:
+      tft.setTextColor(ST77XX_CYAN);
+      tft.print("MOVING CW");
+      break;
+    case ROTATING_CCW:
+      tft.setTextColor(ST77XX_MAGENTA);
+      tft.print("MOVING CCW");
+      break;
+    case STOPPED:
+      tft.setTextColor(ST77XX_GREEN);
+      tft.print("Connected,\nwaiting for\nsignal");
+      break;
+  }
+  
   tft.setTextColor(ST77XX_WHITE);
+  tft.setTextSize(3);
 }
 
-void counterclockwise(){
-  tft.setCursor(0, 40);
-  tft.print("Moving CCW...");
-  myStepper.setSpeed(50);
-  
-  // Non-blocking step loop
-  int stepsRemaining = stepsPerRevolution;
-  int chunkSize = 5; 
-  while(stepsRemaining > 0) {
-      int s = (stepsRemaining > chunkSize) ? chunkSize : stepsRemaining;
-      myStepper.step(-s); 
-      stepsRemaining -= s;
-      updateSensor(); // Check sensor while moving
+void doMotorStep() {
+  // Perform a small step based on current motor state
+  if (motorState == ROTATING_CW) {
+    myStepper.step(2); // Small step for responsiveness
+  } else if (motorState == ROTATING_CCW) {
+    myStepper.step(-2); // Small step for responsiveness
   }
-  
-  tft.setCursor(0, 40);
-  tft.setTextColor(ST77XX_GREEN);
-  tft.print("Done!       ");
-  tft.setTextColor(ST77XX_WHITE);
+  // If STOPPED, do nothing
 }
 
 class MyServerCallbacks: public BLEServerCallbacks {
@@ -222,27 +224,35 @@ void loop() {
   // 1. Handle New Commands
   if (newCommandReceived) {
     // Reset flag immediately so we don't repeat
-    newCommandReceived = false; 
+    newCommandReceived = false;
 
-    // Print raw command to screen
-    tft.fillScreen(ST77XX_BLACK);
-    tft.setCursor(0, 0);
-    tft.print(incomingCommand);
     Serial.println("Command: " + incomingCommand);
 
-    // Motor Logic
-    // We trim() to remove any invisible newlines from the phone
+    // Motor Logic - State-based commands
     incomingCommand.trim();
     
-    if (incomingCommand == "CW") {
-      clockwise();
+    if (incomingCommand == "START_CW") {
+      motorState = ROTATING_CW;
+      myStepper.setSpeed(50);
+      updateDisplay();
     } 
-    else if (incomingCommand == "CCW") {
-      counterclockwise();
+    else if (incomingCommand == "START_CCW") {
+      motorState = ROTATING_CCW;
+      myStepper.setSpeed(50);
+      updateDisplay();
+    }
+    else if (incomingCommand == "STOP") {
+      motorState = STOPPED;
+      updateDisplay();
     }
   }
 
-  // 2. Handle Disconnect/Reconnect
+  // 2. Perform motor step if rotating
+  if (motorState != STOPPED) {
+    doMotorStep();
+  }
+
+  // 3. Handle Disconnect/Reconnect
   if (!deviceConnected && oldDeviceConnected) {
       delay(500); 
       pServer->startAdvertising(); 
@@ -252,11 +262,11 @@ void loop() {
       oldDeviceConnected = deviceConnected;
       tft.fillScreen(ST77XX_GREEN); 
       delay(500);
-      tft.fillScreen(ST77XX_BLACK);
-      tft.setCursor(0,0);
-      tft.print("Connected!");
+      motorState = STOPPED; // Reset state
+      lastDisplayedState = STOPPED;
+      updateDisplay();
   }
 
-  // 3. Sensor Tracking & Bluetooth
+  // 4. Sensor Tracking & Bluetooth
   updateSensor();
 }

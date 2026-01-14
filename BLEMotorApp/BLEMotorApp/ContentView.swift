@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var isAutoPositioning = false
     @State private var targetRotation: Double? = nil
     @State private var positioningTolerance: Double = 0.05
+    @State private var isButtonPressed = false
     @AppStorage("isSwapped") private var isSwapped = false
 
     var body: some View {
@@ -202,12 +203,14 @@ struct ContentView: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { _ in
-                                    if !isAutoPositioning {
-                                        ble.startRepeatingCommand(isSwapped ? "CW" : "CCW")
+                                    if !isAutoPositioning && !isButtonPressed {
+                                        isButtonPressed = true
+                                        ble.startMotor(isSwapped ? "CW" : "CCW")
                                     }
                                 }
                                 .onEnded { _ in
-                                    ble.stopRepeatingCommand()
+                                    isButtonPressed = false
+                                    ble.stopMotor()
                                 }
                         )
                     
@@ -222,12 +225,14 @@ struct ContentView: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { _ in
-                                    if !isAutoPositioning {
-                                        ble.startRepeatingCommand(isSwapped ? "CCW" : "CW")
+                                    if !isAutoPositioning && !isButtonPressed {
+                                        isButtonPressed = true
+                                        ble.startMotor(isSwapped ? "CCW" : "CW")
                                     }
                                 }
                                 .onEnded { _ in
-                                    ble.stopRepeatingCommand()
+                                    isButtonPressed = false
+                                    ble.stopMotor()
                                 }
                         )
                 }
@@ -254,7 +259,7 @@ struct ContentView: View {
         // Start moving in the appropriate direction
         if let (_, currentRotation, _) = getCurrentSensorData() {
             let direction = target > currentRotation ? "CW" : "CCW"
-            ble.startRepeatingCommand(direction)
+            ble.startMotor(direction)
         }
     }
     
@@ -270,7 +275,7 @@ struct ContentView: View {
     func stopAutoPositioning() {
         isAutoPositioning = false
         targetRotation = nil
-        ble.stopRepeatingCommand()
+        ble.stopMotor()
     }
     
     func parseSensorData(_ data: String) -> (Double, Double, Int) {
