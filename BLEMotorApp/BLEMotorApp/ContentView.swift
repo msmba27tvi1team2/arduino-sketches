@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var isAutoPositioning = false
     @State private var targetRotation: Double? = nil
     @State private var positioningTolerance: Double = 0.05
+    @AppStorage("isSwapped") private var isSwapped = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -169,48 +170,69 @@ struct ContentView: View {
             Spacer()
             
             // Motor Controls
-            HStack(spacing: 60) {
-                // CW Button (Hold to repeat)
-                Text("CW")
-                    .font(.title2.bold())
+            HStack(spacing: 30) {
+                // Swap Control
+                Button(action: {
+                    isSwapped.toggle()
+                }) {
+                    VStack(spacing: 4) {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                            .font(.title2)
+                        Text(isSwapped ? "Swapped" : "Normal")
+                            .font(.system(size: 10))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.5)
+                    }
+                    .padding(8)
                     .frame(width: 80, height: 80)
-                    .background(Color.green)
-                    .foregroundColor(.white)
-                    .clipShape(Circle())
-                    .shadow(radius: 4)
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in
-                                if !isAutoPositioning {
-                                    ble.startRepeatingCommand("CW")
-                                }
-                            }
-                            .onEnded { _ in
-                                ble.stopRepeatingCommand()
-                            }
-                    )
+                    .background(Color(.systemGray5))
+                    .cornerRadius(10)
+                }
                 
-                // CCW Button (Hold to repeat)
-                Text("CCW")
-                    .font(.title2.bold())
-                    .frame(width: 80, height: 80)
-                    .background(Color.orange)
-                    .foregroundColor(.white)
-                    .clipShape(Circle())
-                    .shadow(radius: 4)
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { _ in
-                                if !isAutoPositioning {
-                                    ble.startRepeatingCommand("CCW")
+                // Directional Controls
+                VStack(spacing: 20) {
+                    // UP Button
+                    Text("UP")
+                        .font(.system(size: 18, weight: .bold))
+                        .frame(width: 100, height: 100)
+                        .background(Color.blue)
+                        .foregroundColor(.white)
+                        .clipShape(Circle())
+                        .shadow(radius: 4)
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { _ in
+                                    if !isAutoPositioning {
+                                        ble.startRepeatingCommand(isSwapped ? "CW" : "CCW")
+                                    }
                                 }
-                            }
-                            .onEnded { _ in
-                                ble.stopRepeatingCommand()
-                            }
-                    )
+                                .onEnded { _ in
+                                    ble.stopRepeatingCommand()
+                                }
+                        )
+                    
+                    // DOWN Button
+                    Text("DOWN")
+                        .font(.system(size: 18, weight: .bold))
+                        .frame(width: 100, height: 100)
+                        .background(Color.blue.opacity(0.7))
+                        .foregroundColor(.white)
+                        .clipShape(Circle())
+                        .shadow(radius: 4)
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { _ in
+                                    if !isAutoPositioning {
+                                        ble.startRepeatingCommand(isSwapped ? "CCW" : "CW")
+                                    }
+                                }
+                                .onEnded { _ in
+                                    ble.stopRepeatingCommand()
+                                }
+                        )
+                }
             }
-            .padding(.bottom, 40)
+            .padding(.bottom, 20)
             
             Spacer()
         }
