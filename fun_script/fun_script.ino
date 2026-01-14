@@ -90,8 +90,8 @@ void updateSensor() {
             smoothedTicks = totalSensorTicks;
             firstRunSmoothed = false;
           } else {
-            // EMA Smoothing
-            smoothedTicks = (0.2 * totalSensorTicks) + (0.8 * smoothedTicks);
+            // EMA Smoothing - lighter smoothing for better responsiveness
+            smoothedTicks = (0.7 * totalSensorTicks) + (0.3 * smoothedTicks);
           }
 
           // Calibration: User measurement shows ~1800 ticks per mechanical revolution
@@ -208,7 +208,7 @@ void setup() {
     tft.setTextColor(ST77XX_WHITE);
   } else {
     as5600.setPowerMode(AS5600_POWER_MODE_NOM);
-    as5600.setHysteresis(AS5600_HYSTERESIS_3LSB); // Enable Hysteresis to reduce noise
+    as5600.setHysteresis(AS5600_HYSTERESIS_OFF); // Match encoder_script for consistent signal detection
     as5600.setOutputStage(AS5600_OUTPUT_STAGE_ANALOG_FULL);
     as5600.setSlowFilter(AS5600_SLOW_FILTER_16X);
     as5600.setFastFilterThresh(AS5600_FAST_FILTER_THRESH_SLOW_ONLY);
