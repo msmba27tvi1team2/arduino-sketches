@@ -24,40 +24,32 @@ struct MoveMotorIntent: AppIntent {
     }
 }
 
-// MARK: - Open Intent (Uses Default Duration)
-struct OpenMotorIntent: AppIntent {
-    static var title: LocalizedStringResource = "Open Motor"
-    static var description = IntentDescription("Opens the motor (Up direction) using the default duration.")
+// MARK: - Go to High Intent
+struct GoToHighIntent: AppIntent {
+    static var title: LocalizedStringResource = "Go to High"
+    static var description = IntentDescription("Moves the motor to the High calibration position for 5 seconds.")
     
     func perform() async throws -> some IntentResult {
         let isSwapped = UserDefaults.standard.bool(forKey: "isSwapped")
-        // Open = Up
+        // High = Up direction
         let commandString = isSwapped ? "CW" : "CCW"
         
-        let duration = UserDefaults.standard.double(forKey: "defaultDuration")
-        // Handle case where default might be 0 if not set, though AppStorage usually handles valid defaults in app context.
-        // In Extension context, simple defaults might return 0 if never set. Key matches ContentView.
-        let finalDuration = duration > 0 ? duration : 5.0
-        
-        try await BLEManager.shared.runMotorForDuration(direction: commandString, seconds: finalDuration)
+        try await BLEManager.shared.runMotorForDuration(direction: commandString, seconds: 5.0)
         return .result()
     }
 }
 
-// MARK: - Close Intent (Uses Default Duration)
-struct CloseMotorIntent: AppIntent {
-    static var title: LocalizedStringResource = "Close Motor"
-    static var description = IntentDescription("Closes the motor (Down direction) using the default duration.")
+// MARK: - Go to Low Intent
+struct GoToLowIntent: AppIntent {
+    static var title: LocalizedStringResource = "Go to Low"
+    static var description = IntentDescription("Moves the motor to the Low calibration position for 5 seconds.")
     
     func perform() async throws -> some IntentResult {
         let isSwapped = UserDefaults.standard.bool(forKey: "isSwapped")
-        // Close = Down
+        // Low = Down direction
         let commandString = isSwapped ? "CCW" : "CW"
         
-        let duration = UserDefaults.standard.double(forKey: "defaultDuration")
-        let finalDuration = duration > 0 ? duration : 5.0
-        
-        try await BLEManager.shared.runMotorForDuration(direction: commandString, seconds: finalDuration)
+        try await BLEManager.shared.runMotorForDuration(direction: commandString, seconds: 5.0)
         return .result()
     }
 }
@@ -98,24 +90,24 @@ struct MotorShortcuts: AppShortcutsProvider {
         )
         
         AppShortcut(
-            intent: OpenMotorIntent(),
+            intent: GoToHighIntent(),
             phrases: [
-                "Open \(.applicationName)",
-                "Open motor using \(.applicationName)",
-                "Open blinds with \(.applicationName)"
+                "Go to high using \(.applicationName)",
+                "Set motor to high with \(.applicationName)",
+                "Move to high position on \(.applicationName)"
             ],
-            shortTitle: "Open Motor",
+            shortTitle: "Go to High",
             systemImageName: "arrow.up.circle"
         )
         
         AppShortcut(
-            intent: CloseMotorIntent(),
+            intent: GoToLowIntent(),
             phrases: [
-                "Close \(.applicationName)",
-                "Close motor using \(.applicationName)",
-                "Close blinds with \(.applicationName)"
+                "Go to low using \(.applicationName)",
+                "Set motor to low with \(.applicationName)",
+                "Move to low position on \(.applicationName)"
             ],
-            shortTitle: "Close Motor",
+            shortTitle: "Go to Low",
             systemImageName: "arrow.down.circle"
         )
     }

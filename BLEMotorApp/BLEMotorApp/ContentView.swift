@@ -11,7 +11,6 @@ struct ContentView: View {
     @State private var positioningTolerance: Double = 0.05
     @State private var isButtonPressed = false
     @AppStorage("isSwapped") private var isSwapped = false
-    @AppStorage("defaultDuration") private var defaultDuration: Double = 5.0
 
     var body: some View {
         VStack(spacing: 20) {
@@ -42,37 +41,22 @@ struct ContentView: View {
                  let (angle, rotations, ticks) = parseSensorData(ble.lastReceived)
                  
                  HStack {
-                     // Compass Visual
+                     // Compass Visual - Compact
                      CompassView(angle: angle)
                      
                      Spacer()
                      
-                     // Text Info
+                     // Text Info - Only Rotations
                      VStack(alignment: .trailing) {
-                         Text("Angle")
-                             .font(.caption)
-                             .foregroundColor(.secondary)
-                         Text(String(format: "%.1f°", angle))
-                             .font(.title2.monospaced())
-                             .bold()
-                         
                          Text("Rotations")
                              .font(.caption)
                              .foregroundColor(.secondary)
-                             .padding(.top, 4)
                          Text(String(format: "%.1f", rotations))
-                             .font(.title2.monospaced())
-                             .bold()
-                             
-                         Text("Ticks")
-                             .font(.caption2)
-                             .foregroundColor(.secondary)
-                             .padding(.top, 4)
-                         Text("\(ticks)")
-                             .font(.system(.body, design: .monospaced))
+                             .font(.system(size: 32, weight: .bold, design: .monospaced))
                      }
                  }
-                 .padding()
+                 .padding(.horizontal)
+                 .padding(.vertical, 8)
                  .background(Color.blue.opacity(0.1))
                  .cornerRadius(12)
                  .onChange(of: rotations) { _, newRotation in
@@ -169,26 +153,7 @@ struct ContentView: View {
             .background(Color.purple.opacity(0.1))
             .cornerRadius(12)
             
-            // Voice Control Settings
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Voice Control Settings")
-                    .font(.headline)
-                
-                HStack {
-                    Text("Default Duration:")
-                        .font(.subheadline)
-                    Spacer()
-                    Text("\(String(format: "%.1f", defaultDuration)) s")
-                        .font(.system(.body, design: .monospaced))
-                }
-                
-                Slider(value: $defaultDuration, in: 1...30, step: 0.5)
-            }
-            .padding()
-            .background(Color(.systemGray6))
-            .cornerRadius(12)
-            
-            Spacer()
+
             
             // Motor Controls
             HStack(spacing: 30) {
@@ -210,12 +175,12 @@ struct ContentView: View {
                     .cornerRadius(10)
                 }
                 
-                // Directional Controls
-                VStack(spacing: 20) {
+                // Directional Controls - Side by side
+                HStack(spacing: 20) {
                     // UP Button
                     Text("UP")
-                        .font(.system(size: 18, weight: .bold))
-                        .frame(width: 100, height: 100)
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(width: 80, height: 80)
                         .background(Color.blue)
                         .foregroundColor(.white)
                         .clipShape(Circle())
@@ -236,8 +201,8 @@ struct ContentView: View {
                     
                     // DOWN Button
                     Text("DOWN")
-                        .font(.system(size: 18, weight: .bold))
-                        .frame(width: 100, height: 100)
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(width: 80, height: 80)
                         .background(Color.blue.opacity(0.7))
                         .foregroundColor(.white)
                         .clipShape(Circle())
@@ -328,13 +293,13 @@ struct CompassView: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.gray.opacity(0.3), lineWidth: 4)
-                .frame(width: 80, height: 80)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 3)
+                .frame(width: 50, height: 50)
             
             Image(systemName: "arrow.up.circle.fill")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 70, height: 70)
+                .frame(width: 44, height: 44)
                 .foregroundColor(.blue)
                 .rotationEffect(.degrees(visualAngle))
                 .animation(.spring(response: 0.4, dampingFraction: 0.8), value: visualAngle)

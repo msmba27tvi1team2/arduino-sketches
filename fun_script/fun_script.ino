@@ -11,7 +11,7 @@
 // --- Stepper Setup ---
 const int stepsPerRevolution = 200;
 // Note: Ensure your wiring matches these pins (A0-A3 or D6-D11 depending on labels)
-Stepper myStepper(stepsPerRevolution, 6, 9, 10, 11);
+Stepper myStepper(stepsPerRevolution, 12, 9, 10, 11);
 
 // --- Screen Setup ---
 Adafruit_ST7789 tft = Adafruit_ST7789(TFT_CS, TFT_DC, TFT_RST);
