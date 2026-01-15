@@ -3,15 +3,22 @@ import SwiftUI
 struct ContentView: View {
     @ObservedObject private var ble = BLEManager.shared
     
-    // Calibration state
-    @State private var highRotation: Double? = nil
-    @State private var lowRotation: Double? = nil
+    // Persistent calibration state using AppStorage
+    @AppStorage("isCalibrated") private var isCalibrated = false
+    @AppStorage("highRotation") private var highRotation: Double = 0.0
+    @AppStorage("lowRotation") private var lowRotation: Double = 0.0
+    @AppStorage("isSwapped") private var isSwapped = false
+    
+    // Temporary state
     @State private var isAutoPositioning = false
     @State private var targetRotation: Double? = nil
     @State private var positioningTolerance: Double = 0.05
     @State private var isButtonPressed = false
-    @AppStorage("isSwapped") private var isSwapped = false
     @State private var showDebugDialog = false
+    
+    // Setup phase temporary values (before saving to persistent storage)
+    @State private var tempHighRotation: Double? = nil
+    @State private var tempLowRotation: Double? = nil
 
     var body: some View {
         VStack(spacing: 20) {
@@ -70,81 +77,36 @@ struct ContentView: View {
                 .disabled(!ble.connected)
             }
             
-            // Calibration Section
-            VStack(spacing: 12) {
-                Text("Calibration")
-                    .font(.headline)
-                
-                HStack(spacing: 12) {
-                    VStack {
-                        Button("Set Low") {
-                            if let (_, rotations, _) = getCurrentSensorData() {
-                                lowRotation = rotations
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.blue)
-                        
-                        if let low = lowRotation {
-                            Text("Low: \(String(format: "%.1f", low))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    
-                    VStack {
-                        Button("Set High") {
-                            if let (_, rotations, _) = getCurrentSensorData() {
-                                highRotation = rotations
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                        .tint(.purple)
-                        
-                        if let high = highRotation {
-                            Text("High: \(String(format: "%.1f", high))")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                
-                HStack(spacing: 12) {
-                    Button("Go to Low") {
-                        goToPosition(lowRotation)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.blue)
-                    .disabled(lowRotation == nil || isAutoPositioning)
-                    
-                    Button("Go to High") {
-                        goToPosition(highRotation)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.purple)
-                    .disabled(highRotation == nil || isAutoPositioning)
-                }
-                
-                if isAutoPositioning {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Moving to target...")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        Button("Stop") {
-                            stopAutoPositioning()
-                        }
-                        .font(.caption)
-                        .buttonStyle(.bordered)
-                    }
-                }
+            // Phase-dependent UI
+            if !isCalibrated {
+                // SETUP/CALIBRATION PHASE
+                setupPhaseView(rotations: rotations)
+            } else {
+                // NORMAL OPERATION PHASE
+                operationPhaseView(rotations: rotations)
             }
-            .padding()
-            .background(Color.purple.opacity(0.1))
-            .cornerRadius(12)
             
-
+            Spacer()
+        }
+        .padding()
+        .sheet(isPresented: $showDebugDialog) {
+            debugView()
+        }
+    }
+    
+    // MARK: - Setup Phase View
+    @ViewBuilder
+    private func setupPhaseView(rotations: Double) -> some View {
+        VStack(spacing: 16) {
+            Text("Initial Setup & Calibration")
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            Text("Use the UP/DOWN buttons to move the motor to set your Low and High positions")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
             
             // Motor Controls
             HStack(spacing: 30) {
@@ -179,7 +141,7 @@ struct ContentView: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { _ in
-                                    if !isAutoPositioning && !isButtonPressed {
+                                    if !isButtonPressed {
                                         isButtonPressed = true
                                         ble.startMotor(isSwapped ? "CW" : "CCW")
                                     }
@@ -201,7 +163,7 @@ struct ContentView: View {
                         .gesture(
                             DragGesture(minimumDistance: 0)
                                 .onChanged { _ in
-                                    if !isAutoPositioning && !isButtonPressed {
+                                    if !isButtonPressed {
                                         isButtonPressed = true
                                         ble.startMotor(isSwapped ? "CCW" : "CW")
                                     }
@@ -213,74 +175,219 @@ struct ContentView: View {
                         )
                 }
             }
-            .padding(.bottom, 20)
+            .padding(.vertical)
             
-            Spacer()
-        }
-        .padding()
-        .sheet(isPresented: $showDebugDialog) {
-            NavigationView {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // Connection Status
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Connection Status")
-                                .font(.headline)
-                            Text(ble.statusText)
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                            Text(ble.connected ? "✓ Connected" : "✗ Not Connected")
+            // Calibration Buttons
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    VStack {
+                        Button("Set Low") {
+                            tempLowRotation = rotations
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.blue)
+                        .frame(maxWidth: .infinity)
+                        
+                        if let low = tempLowRotation {
+                            Text("Low: \(String(format: "%.1f", low))")
                                 .font(.caption)
-                                .foregroundColor(ble.connected ? .green : .red)
+                                .foregroundColor(.secondary)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding()
-                        .background(Color(.systemGray6))
-                        .cornerRadius(8)
+                    }
+                    
+                    VStack {
+                        Button("Set High") {
+                            tempHighRotation = rotations
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.purple)
+                        .frame(maxWidth: .infinity)
                         
-                        // Discovered Devices
-                        if !ble.discoveredDevices.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Discovered Devices")
-                                    .font(.headline)
-                                ForEach(ble.discoveredDevices, id: \.self) { device in
-                                    Text(device)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding()
-                            .background(Color(.systemGray6))
+                        if let high = tempHighRotation {
+                            Text("High: \(String(format: "%.1f", high))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                
+                // Complete Setup Button
+                Button(action: completeSetup) {
+                    HStack {
+                        Image(systemName: "checkmark.circle.fill")
+                        Text("Complete Setup")
+                    }
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+                .disabled(tempLowRotation == nil || tempHighRotation == nil)
+            }
+            .padding()
+            .background(Color.green.opacity(0.1))
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Operation Phase View
+    @ViewBuilder
+    private func operationPhaseView(rotations: Double) -> some View {
+        VStack(spacing: 16) {
+            Text("Motor Control")
+                .font(.title2)
+                .fontWeight(.bold)
+            
+            // Progress Bar showing position between Low and High
+            VStack(spacing: 8) {
+                Text("Position")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background track
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.2))
                             .cornerRadius(8)
-                        }
                         
-                        // Error Log
+                        // Progress indicator
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [.blue, .purple],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: max(0, min(geometry.size.width, geometry.size.width * CGFloat(progressPercentage(current: rotations)))))
+                            .cornerRadius(8)
+                    }
+                }
+                .frame(height: 30)
+                
+                HStack {
+                    Text("Low")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Spacer()
+                    Text("\(String(format: "%.0f%%", progressPercentage(current: rotations) * 100))")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                    Spacer()
+                    Text("High")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                }
+            }
+            .padding()
+            .background(Color.blue.opacity(0.05))
+            .cornerRadius(12)
+            
+            // Quick Position Controls
+            VStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    Button(action: { goToPosition(lowRotation) }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 32))
+                            Text("Go to Low")
+                                .font(.headline)
+                            Text("\(String(format: "%.1f", lowRotation))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                    .disabled(isAutoPositioning)
+                    
+                    Button(action: { goToPosition(highRotation) }) {
+                        VStack(spacing: 8) {
+                            Image(systemName: "arrow.up.circle.fill")
+                                .font(.system(size: 32))
+                            Text("Go to High")
+                                .font(.headline)
+                            Text("\(String(format: "%.1f", highRotation))")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.purple)
+                    .disabled(isAutoPositioning)
+                }
+                
+                if isAutoPositioning {
+                    HStack {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                        Text("Moving to target...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Button("Stop") {
+                            stopAutoPositioning()
+                        }
+                        .font(.caption)
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+            .padding()
+            .background(Color.purple.opacity(0.1))
+            .cornerRadius(12)
+            
+            // Re-calibrate Button
+            Button(action: startRecalibration) {
+                HStack {
+                    Image(systemName: "arrow.clockwise.circle")
+                    Text("Re-Calibrate")
+                }
+                .font(.subheadline)
+                .foregroundColor(.orange)
+            }
+            .buttonStyle(.bordered)
+            .tint(.orange)
+        }
+    }
+    
+    // MARK: - Debug View
+    @ViewBuilder
+    private func debugView() -> some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    // Connection Status
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Connection Status")
+                            .font(.headline)
+                        Text(ble.statusText)
+                            .font(.body)
+                            .foregroundColor(.secondary)
+                        Text(ble.connected ? "✓ Connected" : "✗ Not Connected")
+                            .font(.caption)
+                            .foregroundColor(ble.connected ? .green : .red)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                    
+                    // Discovered Devices
+                    if !ble.discoveredDevices.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text("Error Log")
-                                    .font(.headline)
-                                Spacer()
-                                if !ble.errorLog.isEmpty {
-                                    Button("Clear") {
-                                        ble.errorLog.removeAll()
-                                    }
-                                    .font(.caption)
-                                    .buttonStyle(.bordered)
-                                }
-                            }
-                            
-                            if ble.errorLog.isEmpty {
-                                Text("No errors")
+                            Text("Discovered Devices")
+                                .font(.headline)
+                            ForEach(ble.discoveredDevices, id: \.self) { device in
+                                Text(device)
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                    .italic()
-                            } else {
-                                ForEach(ble.errorLog.reversed(), id: \.self) { error in
-                                    Text(error)
-                                        .font(.system(.caption, design: .monospaced))
-                                        .foregroundColor(.red)
-                                }
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -288,19 +395,85 @@ struct ContentView: View {
                         .background(Color(.systemGray6))
                         .cornerRadius(8)
                     }
-                    .padding()
-                }
-                .navigationTitle("Debug Info")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        Button("Done") {
-                            showDebugDialog = false
+                    
+                    // Error Log
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Error Log")
+                                .font(.headline)
+                            Spacer()
+                            if !ble.errorLog.isEmpty {
+                                Button("Clear") {
+                                    ble.errorLog.removeAll()
+                                }
+                                .font(.caption)
+                                .buttonStyle(.bordered)
+                            }
                         }
+                        
+                        if ble.errorLog.isEmpty {
+                            Text("No errors")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .italic()
+                        } else {
+                            ForEach(ble.errorLog.reversed(), id: \.self) { error in
+                                Text(error)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(8)
+                }
+                .padding()
+            }
+            .navigationTitle("Debug Info")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        showDebugDialog = false
                     }
                 }
             }
         }
+    }
+    
+    // MARK: - Helper Functions
+    
+    func completeSetup() {
+        guard let low = tempLowRotation, let high = tempHighRotation else { return }
+        
+        // Save to persistent storage
+        lowRotation = low
+        highRotation = high
+        isCalibrated = true
+        
+        // Clear temporary values
+        tempLowRotation = nil
+        tempHighRotation = nil
+    }
+    
+    func startRecalibration() {
+        isCalibrated = false
+        tempLowRotation = nil
+        tempHighRotation = nil
+    }
+    
+    func progressPercentage(current: Double) -> Double {
+        // Calculate position between low and high as a percentage (0.0 to 1.0)
+        let range = highRotation - lowRotation
+        
+        if abs(range) < 0.001 {
+            return 0.0
+        }
+        
+        let progress = (current - lowRotation) / range
+        return max(0.0, min(1.0, progress)) // Clamp between 0 and 1
     }
     
     func getCurrentSensorData() -> (Double, Double, Int)? {
@@ -310,8 +483,7 @@ struct ContentView: View {
         return nil
     }
     
-    func goToPosition(_ target: Double?) {
-        guard let target = target else { return }
+    func goToPosition(_ target: Double) {
         targetRotation = target
         isAutoPositioning = true
         
