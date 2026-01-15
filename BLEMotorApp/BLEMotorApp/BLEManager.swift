@@ -12,11 +12,20 @@ final class BLEManager: NSObject, ObservableObject {
     @Published var connected: Bool = false
     @Published var lastReceived: String = ""
     @Published var discoveredDevices: [String] = []
+    @Published var errorLog: [String] = []
 
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var rxCharacteristic: CBCharacteristic? // write here
     private var txCharacteristic: CBCharacteristic? // notify here
+    
+    // Local rotation tracking (simulated since encoder is broken)
+    private var simulatedAngle: Double = 0.0
+    private var simulatedRotations: Double = 0.0
+    private var isMotorRunning: Bool = false
+    private var motorDirection: String = ""
+    private var rotationTimer: Timer?
+    private let rotationSpeed: Double = 30.0 // degrees per update (adjust to match actual motor speed)
 
     static let shared = BLEManager()
 
@@ -58,7 +67,11 @@ final class BLEManager: NSObject, ObservableObject {
 
     func sendCommand(_ text: String) {
         guard let rx = rxCharacteristic, let p = peripheral else {
-            statusText = "Not connected"
+            let timestamp = DateFormatter.localizedString(from: Date(), dateStyle: .none, timeStyle: .medium)
+            let errorMsg = "\(timestamp) - Failed to send '\(text)': Not connected"
+            errorLog.append(errorMsg)
+            print("[BLE ERROR] \(errorMsg)")
+            // Don't return - allow local simulation to continue
             return
         }
         
@@ -69,10 +82,63 @@ final class BLEManager: NSObject, ObservableObject {
 
     func startMotor(_ direction: String) {
         sendCommand("START_\(direction)")
+        
+        // Start simulating rotation locally
+        motorDirection = direction
+        isMotorRunning = true
+        startRotationSimulation()
     }
 
     func stopMotor() {
         sendCommand("STOP")
+        
+        // Stop simulating rotation
+        isMotorRunning = false
+        stopRotationSimulation()
+    }
+    
+    // MARK: - Rotation Simulation (Local Tracking)
+    private func startRotationSimulation() {
+        // Stop any existing timer
+        rotationTimer?.invalidate()
+        
+        // Update every 50ms to match the original sensor read interval
+        rotationTimer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
+            guard let self = self, self.isMotorRunning else { return }
+            self.updateSimulatedRotation()
+        }
+    }
+    
+    private func stopRotationSimulation() {
+        rotationTimer?.invalidate()
+        rotationTimer = nil
+    }
+    
+    private func updateSimulatedRotation() {
+        // Update angle based on direction
+        let delta = motorDirection == "CW" ? rotationSpeed : -rotationSpeed
+        simulatedAngle += delta
+        
+        // Normalize angle to 0-360
+        while simulatedAngle >= 360 {
+            simulatedAngle -= 360
+            simulatedRotations += 1
+        }
+        while simulatedAngle < 0 {
+            simulatedAngle += 360
+            simulatedRotations -= 1
+        }
+        
+        // Update the published lastReceived with simulated data
+        let angle0to360 = simulatedAngle
+        let totalRotations = simulatedRotations + (simulatedAngle / 360.0)
+        let ticks = Int(totalRotations * 1800.0) // Simulate ticks for compatibility
+        
+        let dataStr = "A:\(String(format: "%.1f", angle0to360)) R:\(String(format: "%.1f", totalRotations)) T:\(ticks)"
+        
+        DispatchQueue.main.async {
+            self.lastReceived = dataStr
+        }
     }
     
     // MARK: - Async / Intent Support
@@ -229,14 +295,8 @@ extension BLEManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             statusText = "Notify error: \(err.localizedDescription)"
             return
         }
-        if let data = characteristic.value, let s = String(data: data, encoding: .utf8) {
-            DispatchQueue.main.async {
-                // Only process sensor data (format: "A:123.4 R:2.4 T:1800")
-                if s.starts(with: "A:") {
-                    self.lastReceived = s
-                }
-            }
-        }
+        // Ignore incoming sensor data - we're now using local simulation
+        // This is because the encoder is no longer working
     }
 
     func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {

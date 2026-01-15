@@ -11,57 +11,48 @@ struct ContentView: View {
     @State private var positioningTolerance: Double = 0.05
     @State private var isButtonPressed = false
     @AppStorage("isSwapped") private var isSwapped = false
+    @State private var showDebugDialog = false
 
     var body: some View {
         VStack(spacing: 20) {
-            // Status Section
-            VStack(alignment: .leading, spacing: 8) {
-                Text(ble.statusText)
-                    .font(.headline)
-                    .padding(.bottom, 4)
-                
-                if !ble.discoveredDevices.isEmpty {
-                    Text("Devices seen:")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    ForEach(ble.discoveredDevices, id: \.self) { device in
-                        Text(device)
-                            .font(.caption)
-                            .lineLimit(1)
+            // Debug Button
+            HStack {
+                Spacer()
+                Button(action: { showDebugDialog = true }) {
+                    HStack {
+                        Image(systemName: "ant.circle")
+                        Text("Debug")
                     }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                }
+                .buttonStyle(.bordered)
+            }
+            
+            // Sensor Data Display - Always visible
+            let (angle, rotations, ticks) = !ble.lastReceived.isEmpty ? parseSensorData(ble.lastReceived) : (0.0, 0.0, 0)
+            
+            HStack {
+                // Compass Visual - Compact
+                CompassView(angle: angle)
+                
+                Spacer()
+                
+                // Text Info - Only Rotations
+                VStack(alignment: .trailing) {
+                    Text("Rotations")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(String(format: "%.1f", rotations))
+                        .font(.system(size: 32, weight: .bold, design: .monospaced))
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding()
-            .background(Color(.systemGray6))
+            .padding(.horizontal)
+            .padding(.vertical, 8)
+            .background(Color.blue.opacity(0.1))
             .cornerRadius(12)
-            
-            // Sensor Data Display
-            if !ble.lastReceived.isEmpty {
-                 let (angle, rotations, ticks) = parseSensorData(ble.lastReceived)
-                 
-                 HStack {
-                     // Compass Visual - Compact
-                     CompassView(angle: angle)
-                     
-                     Spacer()
-                     
-                     // Text Info - Only Rotations
-                     VStack(alignment: .trailing) {
-                         Text("Rotations")
-                             .font(.caption)
-                             .foregroundColor(.secondary)
-                         Text(String(format: "%.1f", rotations))
-                             .font(.system(size: 32, weight: .bold, design: .monospaced))
-                     }
-                 }
-                 .padding(.horizontal)
-                 .padding(.vertical, 8)
-                 .background(Color.blue.opacity(0.1))
-                 .cornerRadius(12)
-                 .onChange(of: rotations) { _, newRotation in
-                     checkAutoPositioning(currentRotation: newRotation)
-                 }
+            .onChange(of: rotations) { _, newRotation in
+                checkAutoPositioning(currentRotation: newRotation)
             }
             
             // Connection Controls
@@ -124,14 +115,14 @@ struct ContentView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.blue)
-                    .disabled(lowRotation == nil || isAutoPositioning || !ble.connected)
+                    .disabled(lowRotation == nil || isAutoPositioning)
                     
                     Button("Go to High") {
                         goToPosition(highRotation)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.purple)
-                    .disabled(highRotation == nil || isAutoPositioning || !ble.connected)
+                    .disabled(highRotation == nil || isAutoPositioning)
                 }
                 
                 if isAutoPositioning {
@@ -227,6 +218,89 @@ struct ContentView: View {
             Spacer()
         }
         .padding()
+        .sheet(isPresented: $showDebugDialog) {
+            NavigationView {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Connection Status
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Connection Status")
+                                .font(.headline)
+                            Text(ble.statusText)
+                                .font(.body)
+                                .foregroundColor(.secondary)
+                            Text(ble.connected ? "✓ Connected" : "✗ Not Connected")
+                                .font(.caption)
+                                .foregroundColor(ble.connected ? .green : .red)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                        
+                        // Discovered Devices
+                        if !ble.discoveredDevices.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Discovered Devices")
+                                    .font(.headline)
+                                ForEach(ble.discoveredDevices, id: \.self) { device in
+                                    Text(device)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .background(Color(.systemGray6))
+                            .cornerRadius(8)
+                        }
+                        
+                        // Error Log
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Error Log")
+                                    .font(.headline)
+                                Spacer()
+                                if !ble.errorLog.isEmpty {
+                                    Button("Clear") {
+                                        ble.errorLog.removeAll()
+                                    }
+                                    .font(.caption)
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                            
+                            if ble.errorLog.isEmpty {
+                                Text("No errors")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .italic()
+                            } else {
+                                ForEach(ble.errorLog.reversed(), id: \.self) { error in
+                                    Text(error)
+                                        .font(.system(.caption, design: .monospaced))
+                                        .foregroundColor(.red)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                        .background(Color(.systemGray6))
+                        .cornerRadius(8)
+                    }
+                    .padding()
+                }
+                .navigationTitle("Debug Info")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            showDebugDialog = false
+                        }
+                    }
+                }
+            }
+        }
     }
     
     func getCurrentSensorData() -> (Double, Double, Int)? {
